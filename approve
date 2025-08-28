@@ -1,0 +1,37 @@
+#!/usr/bin/env bash
+set -euo pipefail
+BUS="$HOME/airoom/bus"
+TOOLS="$HOME/airoom/tools"
+NAME="${1:?usage: approve <name>}"
+
+# 名前の形式チェック
+if ! printf "%s" "$NAME" | grep -Eq '^[a-zA-Z0-9_-]{1,40}$'; then
+  echo "[approve] invalid name: $NAME" >&2; exit 1
+fi
+
+# 申請ブロック抽出（name行から次の - name: 直前まで）
+BLOCK="$(awk -v RS='' -v name="$NAME" '$0 ~ "name:[[:space:]]*"name {print; found=1} END{if(!found) exit 1}' "$BUS/want_commands.md")" \
+  || { echo "[approve] not found: $NAME" >&2; exit 1; }
+
+# code: | セクションを抜く
+CODE="$(printf "%s\n" "$BLOCK" | awk '/^ *code: *\|/{f=1;next} /^- name:/{f=0} f {sub(/^  /,""); print}')"
+[ -n "$CODE" ] || { echo "[approve] no code in block" >&2; exit 1; }
+
+# バリデータで安全性チェック
+printf "%s" "$CODE" | "$HOME/airoom/validate_code.sh" > /dev/null \
+  || { echo "[approve] validation failed, denied" >&2; exit 1; }
+
+# approved_commands.md に移動
+printf "%s\n\n" "$BLOCK" >> "$BUS/approved_commands.md"
+awk -v RS='' -v name="$NAME" '$0 !~ "name:[[:space:]]*"name {print}' "$BUS/want_commands.md" > "$BUS/want_commands.tmp"
+mv "$BUS/want_commands.tmp" "$BUS/want_commands.md"
+
+# tools に追加
+FILE="$TOOLS/$NAME.sh"
+if [[ -f "$FILE" ]]; then
+  echo "[approve] tool already exists: $FILE" >&2; exit 1
+fi
+printf "%s\n" "$CODE" > "$FILE"
+chmod +x "$FILE"
+
+echo "[approve] $NAME 承認 → $FILE を生成しました"

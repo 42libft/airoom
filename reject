@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+set -euo pipefail
+BUS="$HOME/airoom/bus"
+NAME="$1"
+
+awk -v RS='' -v name="$NAME" '
+  $0 ~ "name: "name {
+    print > (ENVIRON["BUS"]"/rejected_commands.md")
+    next
+  }
+  {print > (ENVIRON["BUS"]"/want_commands.tmp")}
+' "$BUS/want_commands.md"
+
+mv "$BUS/want_commands.tmp" "$BUS/want_commands.md"
+echo "[reject] $NAME → rejected_commands.md に移動しました"

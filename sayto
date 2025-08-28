@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+set -euo pipefail
+BUS="$HOME/airoom/bus"
+MSG="${*:?usage: sayto <message>}"
+printf "%s USER: %s\n" "$(date '+%H:%M')" "$MSG" >> "$BUS/user_in.md"
+echo "[sent] $MSG"

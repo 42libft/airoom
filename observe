@@ -1,0 +1,66 @@
+#!/usr/bin/env bash
+set -euo pipefail
+ROOT="$HOME/airoom"
+BUS="$ROOT/bus"
+
+USERIN="$BUS/user_in.md"
+USEROUT="$BUS/user_out.md"
+GEMLOG="$BUS/gemini_out.md"   # 任意の“相手AIログ”（無くてもOK）
+
+# ANSI色
+if [ -t 1 ]; then
+  C_RESET="\033[0m"; C_DIM="\033[2m"; C_GRAY="\033[90m"
+  C_YOU="\033[36m"      # シアン: あなたの発言（USER）
+  C_CLAUDE="\033[32m"   # 緑: Claude
+  C_GEMINI="\033[35m"   # マゼンタ: Gemini
+  C_TOOL="\033[33m"     # 黄: tool実行
+  C_INFO="\033[94m"     # 青: 情報
+else
+  C_RESET=""; C_DIM=""; C_GRAY=""; C_YOU=""; C_CLAUDE=""; C_GEMINI=""; C_TOOL=""; C_INFO=""
+fi
+
+printf "${C_INFO}== AI Room Observer ==${C_RESET}\n"
+printf "${C_DIM}観測: %s, %s, %s${C_RESET}\n" "$USERIN" "$USEROUT" "$GEMLOG"
+
+ts() { date '+%H:%M:%S'; }
+
+print_line () {
+  local SRC="$1"; shift
+  local LINE="$*"
+  local COL="$C_GRAY" TAG="SYS"
+
+  case "$SRC" in
+    YOU)
+      COL="$C_YOU"; TAG="YOU"
+      ;;
+    OUT)
+      if printf "%s" "$LINE" | grep -q 'CLAUDE:'; then COL="$C_CLAUDE"; TAG="CLAUDE"
+      elif printf "%s" "$LINE" | grep -q 'GEMINI:'; then COL="$C_GEMINI"; TAG="GEMINI"
+      else COL="$C_INFO"; TAG="AI"; fi
+      if printf "%s" "$LINE" | grep -qi '\[tool:'; then COL="$C_TOOL"; TAG="TOOL"; fi
+      ;;
+    GEM)
+      COL="$C_GEMINI"; TAG="GEMINI*"
+      ;;
+    *)
+      COL="$C_GRAY"; TAG="$SRC";;
+  esac
+
+  printf "%b[%s] %-7s%b %s%b\n" "$COL" "$(ts)" "$TAG" "$C_RESET" "$LINE" "$C_RESET"
+}
+
+# それぞれ tail して色分け出力
+tail -n0 -F "$USERIN" | while IFS= read -r L; do [ -n "$L" ] && print_line YOU "$L"; done &
+PID1=$!
+
+tail -n0 -F "$USEROUT" | while IFS= read -r L; do [ -n "$L" ] && print_line OUT "$L"; done &
+PID2=$!
+
+# 任意ログ（存在しなくてもOK）
+if [ -f "$GEMLOG" ]; then
+  tail -n0 -F "$GEMLOG" | while IFS= read -r L; do [ -n "$L" ] && print_line GEM "$L"; done &
+  PID3=$!
+fi
+
+trap 'echo; echo "observer: bye"; kill $PID1 $PID2 ${PID3:-} 2>/dev/null || true; exit 0' INT TERM
+wait
