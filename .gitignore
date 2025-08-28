@@ -1,0 +1,9 @@
+# runtime / logs / local sandbox
+state/
+work/
+bus/user_out.md
+bus/gemini_out.md
+
+# OS / editor junk
+.DS_Store
+*.swp
